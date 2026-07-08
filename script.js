@@ -5,20 +5,46 @@ const movieResults = document.getElementById('movie-results');
 const watchlist = new Set(); // Use a Set to avoid duplicates
 const watchlistContainer = document.getElementById('watchlist');
 
+// Function to show an error message in the UI
+function showErrorMessage(container, message) {
+  container.innerHTML = `<p class="no-results">${message}</p>`;
+}
+
 // Function to fetch movies from the OMDb API
 async function fetchMovies(query) {
-  const apiKey = 'your-api-key'; // Replace with your OMDb API key
+  const apiKey = 'bb49f8b2'; // Replace with your OMDb API key
   const url = `https://www.omdbapi.com/?s=${query}&apikey=${apiKey}`;
 
-  // Fetch data from the API
-  const response = await fetch(url);
-  const data = await response.json();
+  try {
+    // Fetch data from the API
+    const response = await fetch(url);
 
-  // Check if the response contains movies
-  if (data.Response === 'True') {
-    displayMovies(data.Search);
-  } else {
-    movieResults.innerHTML = '<p class="no-results">No results found. Please try a different search.</p>';
+    // Check for HTTP errors (like 401, 404, 500)
+    if (!response.ok) {
+      const errorDetails = {
+        status: response.status,
+        statusText: response.statusText,
+        url,
+      };
+      console.error('Search request failed:', errorDetails);
+      throw new Error('Unable to search movies right now. Please try again.');
+    }
+
+    const data = await response.json();
+
+    // Check if the response contains movies
+    if (data.Response === 'True') {
+      displayMovies(data.Search);
+    } else {
+      showErrorMessage(movieResults, 'No results found. Please try a different search.');
+    }
+  } catch (error) {
+    console.error('Error while searching movies:', {
+      query,
+      message: error.message,
+      error,
+    });
+    showErrorMessage(movieResults, 'Something went wrong while loading movies. Please try again.');
   }
 }
 
@@ -52,22 +78,49 @@ async function updateWatchlistDisplay() {
     watchlist.forEach(async (movieID) => {
       const apiKey = 'your-api-key'; // Replace with your OMDb API key
       const url = `https://www.omdbapi.com/?i=${movieID}&apikey=${apiKey}`;
-      const response = await fetch(url);
-      const movie = await response.json();
 
-      const watchlistCard = document.createElement('div');
-      watchlistCard.classList.add('movie-card');
+      try {
+        const response = await fetch(url);
 
-      watchlistCard.innerHTML = `
-        <img src="${movie.Poster}" alt="${movie.Title}" class="movie-poster">
-        <div class="movie-info">
-          <h3 class="movie-title">${movie.Title}</h3>
-          <p class="movie-year">${movie.Year}</p>
-          <button class="btn btn-remove" onclick='removeFromWatchlist("${movie.imdbID}")'>Remove</button>
-        </div>
-      `;
+        if (!response.ok) {
+          const errorDetails = {
+            status: response.status,
+            statusText: response.statusText,
+            url,
+            movieID,
+          };
+          console.error('Watchlist request failed:', errorDetails);
+          throw new Error('Failed to load a watchlist movie.');
+        }
 
-      watchlistContainer.appendChild(watchlistCard);
+        const movie = await response.json();
+
+        const watchlistCard = document.createElement('div');
+        watchlistCard.classList.add('movie-card');
+
+        watchlistCard.innerHTML = `
+          <img src="${movie.Poster}" alt="${movie.Title}" class="movie-poster">
+          <div class="movie-info">
+            <h3 class="movie-title">${movie.Title}</h3>
+            <p class="movie-year">${movie.Year}</p>
+            <button class="btn btn-remove" onclick='removeFromWatchlist("${movie.imdbID}")'>Remove</button>
+          </div>
+        `;
+
+        watchlistContainer.appendChild(watchlistCard);
+      } catch (error) {
+        console.error('Error while loading watchlist movie:', {
+          movieID,
+          message: error.message,
+          error,
+        });
+
+        // Show one friendly message and stop rendering more cards on this refresh.
+        showErrorMessage(
+          watchlistContainer,
+          'We could not load your watchlist right now. Please refresh and try again.'
+        );
+      }
     });
   }
 }
